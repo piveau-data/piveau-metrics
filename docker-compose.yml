@@ -1,0 +1,141 @@
+version: "3.5"
+services:
+  piveau-metrics-persistence:
+    build: ../piveau-metrics-persistence
+    container_name: piveau-metrics-persistence
+    ports:
+      - "8087:8087"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    depends_on:
+      - postgres
+    environment:
+      - PGSQL_SERVER_HOST=jdbc:postgresql://postgres:5432/metrics
+      - PGSQL_USERNAME=username
+      - PGSQL_PASSWORD=password
+      - PIVEAU_HUB_SEARCH=piveau-hub-search-url
+      - PIVEAU_HUB_HOST=sparql-endpoint-url
+      - PIVEAU_HUB_PAGE_SIZE=100
+      - HOST=http://piveau-metrics-persistence:8087
+      - PORT=8087
+      - URL_CHECK_ENDPOINT=http://piveau-metrics-url-checker:8085/check
+
+  piveau-metrics-service:
+    build: ../piveau-metrics-service
+    container_name: piveau-metrics-service
+    ports:
+      - "8083:8083"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    depends_on:
+      - postgres
+      - mongo
+      - piveau-metrics-persistence
+    environment:
+      - PGSQL_SERVER_HOST=jdbc:postgresql://postgres:5432/metrics
+      - PGSQL_USERNAME=username
+      - PGSQL_PASSWORD=password
+      - MONGODB_SERVER_HOST=mongodb
+      - MONGODB_SERVER_PORT=27017
+      - API_KEY=apikey
+
+  piveau-metrics-url-checker:
+    build: ../piveau-metrics-url-checker
+    container_name: piveau-metrics-url-checker
+    ports:
+      - "8085:8085"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    depends_on:
+      - piveau-metrics-persistence
+    environment:
+      - PORT=8085
+      - PGSQL_SERVER_HOST=jdbc:postgresql://postgres:5432/metrics
+      - PGSQL_USERNAME=username
+      - PGSQL_PASSWORD=password
+
+  piveau-metrics-similarity-service:
+    build: ../piveau-metrics-similarity-service
+    container_name: piveau-metrics-similarity-service
+    ports:
+      - "8083:8083"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    depends_on:
+      - postgres
+      - mongo
+      - piveau-metrics-persistence
+    environment:
+      - PORT=8083
+      - WORK_DIR=/tmp
+      - SPARQL_URL=sparql endpoint url
+      - API_KEY=apikey
+
+  piveau-metrics-reporter:
+    build: ../piveau-metrics-reporter
+    container_name: piveau-metrics-reporter
+    ports:
+      - "8089:8089"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    depends_on:
+      - piveau-metrics-service
+    environment:
+      - METRIC_HOST=piveau-metrics-service url
+      - METRIC_PORT=piveau-metrics-service port
+      - ELEMENT_LIMIT=10
+      - API_KEY=api key
+
+  piveau-metrics-ui:
+    build: ../piveau-metrics-ui
+    container_name: piveau-metrics-ui
+    ports:
+      - "8080:8080"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    depends_on:
+      - piveau-metrics-service
+    environment:
+      - VUE_APP_ROOT_API=metrics api url
+      - VUE_APP_ROOT_URL=applicaton root url
+      - VUE_APP_MATOMO_URL=matomo tracking url
+
+  mongo:
+    image: mongo:3.4
+    ports:
+      - "27017:27017"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    volumes:
+      - mongo-metrics:/data/db
+  postgres:
+    build:
+      context: postgres
+      shm_size: "256mb"
+    ports:
+      - "5432:5432"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1g"
+    volumes:
+      - postgres-metrics:/var/lib/postgresql/data
+    env_file: postgres.env
+
+volumes:
+  mongo-metrics:
+  postgres-metrics:
